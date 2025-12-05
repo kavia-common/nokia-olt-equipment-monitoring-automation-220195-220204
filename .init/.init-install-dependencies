@@ -1,0 +1,4 @@
+{
+    "command": "npm install",
+    "working_directory": "/home/kavia/workspace/code-generation/nokia-olt-equipment-monitoring-automation-220195-220204/frontend_react"
+}
