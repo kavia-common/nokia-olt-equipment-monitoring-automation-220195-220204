@@ -2,7 +2,9 @@ import React, { createContext, useContext, useMemo } from 'react';
 
 /**
  * ApiClient provides a fetch wrapper and stubbed endpoints for environments without a backend.
- * It reads base URL from REACT_APP_API_BASE or REACT_APP_BACKEND_URL and falls back to stub mode.
+ * It reads base URL from REACT_APP_API_BASE (preferred) or REACT_APP_BACKEND_URL (fallback).
+ * When either is set (non-empty), stub mode is disabled and real network calls are used.
+ * Never log credentials or sensitive headers.
  */
 
 function getBaseUrl() {

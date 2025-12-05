@@ -27,6 +27,13 @@ Launches the test runner in interactive watch mode.
 Builds the app for production to the `build` folder.\
 It correctly bundles React in production mode and optimizes the build for the best performance.
 
+## Backend API Configuration
+
+- Set the backend base URL in `.env`:
+  - `REACT_APP_API_BASE=http://localhost:4000`
+  - The app prefers `REACT_APP_API_BASE` and falls back to `REACT_APP_BACKEND_URL` if not set.
+- Important: After changing `.env`, restart the dev server for changes to take effect (stop `npm start` and run it again).
+
 ## Customization
 
 ### Colors
