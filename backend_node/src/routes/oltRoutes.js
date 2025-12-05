@@ -11,7 +11,7 @@ const openApiDocument = {
   info: {
     title: 'Nokia 7360 OLT Backend API',
     description:
-      'Express-based API for connecting to a Nokia 7360 OLT via SSH and retrieving ONT optics (RX dBm).',
+      'Express-based API for connecting to a Nokia 7360 OLT via Telnet (default) or SSH and retrieving ONT optics (RX dBm).',
     version: '0.1.0'
   },
   paths: {
@@ -30,7 +30,7 @@ const openApiDocument = {
       post: {
         summary: 'Test OLT connection',
         description:
-          'Test SSH connectivity to the OLT using supplied or default credentials. When successful, credentials are cached in memory for subsequent /optics calls.',
+          'Test connectivity to the OLT using supplied or default credentials over the configured protocol (PROTOCOL=telnet|ssh). When successful, credentials are cached in memory for subsequent /optics calls.',
         requestBody: {
           required: false
         },
@@ -107,13 +107,20 @@ router.post('/connect', auth, async (req, res, next) => {
 
     res.json({ ok: true });
   } catch (err) {
-    if (err.code === 'MISSING_CREDENTIALS' || err.code === 'SSH_PARAM_ERROR') {
+    if (
+      err.code === 'MISSING_CREDENTIALS' ||
+      err.code === 'SSH_PARAM_ERROR' ||
+      err.code === 'TELNET_PARAM_ERROR'
+    ) {
       err.status = err.status || 400;
       return next(err);
     }
 
-    // Treat SSH issues as a bad gateway error
-    if (err.code && err.code.startsWith('SSH_')) {
+    // Treat protocol-level issues as a bad gateway error
+    if (
+      err.code &&
+      (err.code.startsWith('SSH_') || err.code.startsWith('TELNET_'))
+    ) {
       err.status = err.status || 502;
       return next(err);
     }
@@ -154,7 +161,10 @@ router.get('/optics', auth, async (req, res, next) => {
       return next(err);
     }
 
-    if (err.code && err.code.startsWith('SSH_')) {
+    if (
+      err.code &&
+      (err.code.startsWith('SSH_') || err.code.startsWith('TELNET_'))
+    ) {
       err.status = err.status || 502;
       return next(err);
     }

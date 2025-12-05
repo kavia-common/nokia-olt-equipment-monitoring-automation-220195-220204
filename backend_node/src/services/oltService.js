@@ -3,11 +3,19 @@
 const {
   OLT_HOST_DEFAULT,
   OLT_SSH_PORT,
+  OLT_TELNET_PORT,
   OLT_USERNAME,
-  OLT_PASSWORD
+  OLT_PASSWORD,
+  PROTOCOL,
+  TELNET_USERNAME_PROMPT,
+  TELNET_PASSWORD_PROMPT,
+  TELNET_SHELL_PROMPT,
+  TELNET_LOGIN_TIMEOUT_MS,
+  TELNET_COMMAND_TIMEOUT_MS
 } = require('../config/env');
 const logger = require('../config/logger');
 const { runSshCommand } = require('./sshClient');
+const { runTelnetCommand } = require('./telnetClient');
 
 // Simple in-memory cache for most recent successful credentials.
 // Suitable for a single-user dev environment; not meant for multi-tenant production.
@@ -22,7 +30,14 @@ function setCachedConnection({ host, port, username, password }) {
   };
 }
 
+function getActiveProtocol() {
+  const proto = (PROTOCOL || 'telnet').toString().toLowerCase();
+  return proto === 'ssh' ? 'ssh' : 'telnet';
+}
+
 function resolveCredentials({ host, port, username, password } = {}) {
+  const activeProtocol = getActiveProtocol();
+
   const fromOverrides = {
     host,
     port,
@@ -32,7 +47,7 @@ function resolveCredentials({ host, port, username, password } = {}) {
   const fromCache = cachedConnection || {};
   const fromEnv = {
     host: OLT_HOST_DEFAULT,
-    port: OLT_SSH_PORT,
+    port: activeProtocol === 'telnet' ? OLT_TELNET_PORT : OLT_SSH_PORT,
     username: OLT_USERNAME,
     password: OLT_PASSWORD
   };
@@ -87,20 +102,35 @@ function parseRxDbm(raw) {
 
 // PUBLIC_INTERFACE
 async function testConnection({ host, port, username, password }) {
-  /** PUBLIC_INTERFACE Test SSH connectivity to the OLT with given or default credentials. */
+  /** PUBLIC_INTERFACE Test connectivity to the OLT with given or default credentials using the configured PROTOCOL. */
   const creds = resolveCredentials({ host, port, username, password });
+  const protocol = getActiveProtocol();
 
-  // Use a harmless command to verify connectivity. This may need adaptation for a real Nokia 7360 CLI.
+  // Use a harmless command to verify connectivity.
   const command = 'show version';
 
-  const result = await runSshCommand({
-    ...creds,
-    command,
-    timeoutMs: 8000
-  });
+  let result;
+  if (protocol === 'ssh') {
+    result = await runSshCommand({
+      ...creds,
+      command,
+      timeoutMs: 8000
+    });
+  } else {
+    result = await runTelnetCommand({
+      ...creds,
+      command,
+      usernamePrompt: TELNET_USERNAME_PROMPT,
+      passwordPrompt: TELNET_PASSWORD_PROMPT,
+      shellPrompt: TELNET_SHELL_PROMPT,
+      loginTimeoutMs: TELNET_LOGIN_TIMEOUT_MS,
+      commandTimeoutMs: TELNET_COMMAND_TIMEOUT_MS
+    });
+  }
 
   logger.info(
     {
+      protocol,
       host: creds.host,
       port: creds.port,
       username: creds.username
@@ -114,7 +144,8 @@ async function testConnection({ host, port, username, password }) {
     stderr: result.stderr,
     host: creds.host,
     port: creds.port,
-    username: creds.username
+    username: creds.username,
+    protocol
   };
 }
 
@@ -131,26 +162,42 @@ async function getOntOptics({ ontPath, host, port, username, password }) {
   const trimmedOnt = ontPath.trim();
 
   const creds = resolveCredentials({ host, port, username, password });
+  const protocol = getActiveProtocol();
 
   const command = `show equipment ont optics ont-id ${trimmedOnt}`;
-  const { stdout, stderr, code } = await runSshCommand({
-    ...creds,
-    command,
-    timeoutMs: 10000
-  });
 
-  const raw = stdout || stderr || '';
+  let execResult;
+  if (protocol === 'ssh') {
+    execResult = await runSshCommand({
+      ...creds,
+      command,
+      timeoutMs: TELNET_COMMAND_TIMEOUT_MS || 10000
+    });
+  } else {
+    execResult = await runTelnetCommand({
+      ...creds,
+      command,
+      usernamePrompt: TELNET_USERNAME_PROMPT,
+      passwordPrompt: TELNET_PASSWORD_PROMPT,
+      shellPrompt: TELNET_SHELL_PROMPT,
+      loginTimeoutMs: TELNET_LOGIN_TIMEOUT_MS,
+      commandTimeoutMs: TELNET_COMMAND_TIMEOUT_MS
+    });
+  }
+
+  const raw = execResult.stdout || execResult.stderr || '';
   const rxDbm = parseRxDbm(raw);
   const at = new Date().toISOString();
 
   logger.info(
     {
+      protocol,
       host: creds.host,
       port: creds.port,
       username: creds.username,
       ontPath: trimmedOnt,
       rxDbm,
-      exitCode: code
+      exitCode: typeof execResult.code === 'number' ? execResult.code : null
     },
     'Fetched ONT optics from OLT'
   );
@@ -160,7 +207,7 @@ async function getOntOptics({ ontPath, host, port, username, password }) {
     rxDbm,
     raw,
     at,
-    exitCode: typeof code === 'number' ? code : null
+    exitCode: typeof execResult.code === 'number' ? execResult.code : null
   };
 }
 

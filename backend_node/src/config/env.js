@@ -11,10 +11,27 @@ dotenv.config({
 // Derive and normalize configuration values
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Protocol used to talk to the OLT: "telnet" (default) or "ssh"
+const PROTOCOL = (process.env.PROTOCOL || 'telnet').toLowerCase();
+
 const PORT = Number.parseInt(process.env.PORT || '4000', 10) || 4000;
 
 const OLT_HOST_DEFAULT = process.env.OLT_HOST_DEFAULT || '202.39.123.124';
+
+// SSH configuration (still supported when PROTOCOL=ssh)
 const OLT_SSH_PORT = Number.parseInt(process.env.OLT_SSH_PORT || '22', 10) || 22;
+
+// Telnet configuration (default protocol)
+const OLT_TELNET_PORT = Number.parseInt(process.env.OLT_TELNET_PORT || '23', 10) || 23;
+
+const TELNET_USERNAME_PROMPT = process.env.TELNET_USERNAME_PROMPT || 'login:';
+const TELNET_PASSWORD_PROMPT = process.env.TELNET_PASSWORD_PROMPT || 'Password:';
+const TELNET_SHELL_PROMPT = process.env.TELNET_SHELL_PROMPT || '#';
+
+const TELNET_LOGIN_TIMEOUT_MS =
+  Number.parseInt(process.env.TELNET_LOGIN_TIMEOUT_MS || '8000', 10) || 8000;
+const TELNET_COMMAND_TIMEOUT_MS =
+  Number.parseInt(process.env.TELNET_COMMAND_TIMEOUT_MS || '10000', 10) || 10000;
 
 // These can come from env or be supplied on each request
 const OLT_USERNAME = process.env.OLT_USERNAME || '';
@@ -49,11 +66,27 @@ function validateConfig() {
   const problems = [];
 
   if (!OLT_HOST_DEFAULT) {
-    problems.push('OLT_HOST_DEFAULT is empty; SSH connections will fail without a host.');
+    problems.push('OLT_HOST_DEFAULT is empty; connections will fail without a host.');
   }
 
   if (Number.isNaN(OLT_SSH_PORT) || OLT_SSH_PORT <= 0) {
     problems.push('OLT_SSH_PORT must be a positive integer.');
+  }
+
+  if (Number.isNaN(OLT_TELNET_PORT) || OLT_TELNET_PORT <= 0) {
+    problems.push('OLT_TELNET_PORT must be a positive integer.');
+  }
+
+  if (!['telnet', 'ssh'].includes(PROTOCOL)) {
+    problems.push(`PROTOCOL "${PROTOCOL}" is not recognized; supported values are "telnet" and "ssh".`);
+  }
+
+  if (Number.isNaN(TELNET_LOGIN_TIMEOUT_MS) || TELNET_LOGIN_TIMEOUT_MS <= 0) {
+    problems.push('TELNET_LOGIN_TIMEOUT_MS must be a positive integer (milliseconds).');
+  }
+
+  if (Number.isNaN(TELNET_COMMAND_TIMEOUT_MS) || TELNET_COMMAND_TIMEOUT_MS <= 0) {
+    problems.push('TELNET_COMMAND_TIMEOUT_MS must be a positive integer (milliseconds).');
   }
 
   if (!['trace', 'debug', 'info', 'warn', 'error', 'fatal'].includes(LOG_LEVEL)) {
@@ -70,9 +103,16 @@ function getConfig() {
 
   return {
     NODE_ENV,
+    PROTOCOL,
     PORT,
     OLT_HOST_DEFAULT,
     OLT_SSH_PORT,
+    OLT_TELNET_PORT,
+    TELNET_USERNAME_PROMPT,
+    TELNET_PASSWORD_PROMPT,
+    TELNET_SHELL_PROMPT,
+    TELNET_LOGIN_TIMEOUT_MS,
+    TELNET_COMMAND_TIMEOUT_MS,
     OLT_USERNAME,
     OLT_PASSWORD,
     API_AUTH_TOKEN,
